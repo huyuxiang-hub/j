@@ -41,7 +41,11 @@ jok-script(){ echo $JUNOTOP/junosw/Examples/Tutorial/share/tut_detsim.py ; }
 jok-init()
 {
    export GEOM=J23_1_0_rc3_ok0         # replace . and - with _ to make valid bash identifier
-   local logdir=${TMP:-/data/$USER/opticks}/GEOM/$GEOM/jok-tds/ALL0 
+    
+   local category="0"
+   local CATE=${CATE:-$category}
+   local logdir=${TMP:-/data/$USER/opticks}/GEOM/$GEOM/jok-tds/ALL${CATE}
+   export VERSION=${CATE}
    mkdir -p $logdir
    cd $logdir     # log files are dropped in invoking directory 
    pwd
@@ -116,8 +120,16 @@ jok-srm-unused-so-far()
 jok-tds(){
    jok-init
 
+
+   local lut=0
+   local LUT=${LUT:-$lut}
+   export QBase__CUSTOM_LUT=$LUT # implement propagate_at_multifilm
+   echo "QBase__CUSTOM_LUT = ${QBase__CUSTOM_LUT}"
+    
    local oim=1     # 1:opticks optical simulation only
+   #local oim=0    # just standard junosw
    #local oim=3    # 3:both geant4 and opticks optical simulation 
+   #local oim=1   # 3:both geant4 and opticks optical simulation 
    local OIM=${OIM:-$oim}
    export OPTICKS_INTEGRATION_MODE=$OIM   
    export OPTICKS_SCRIPT=$FUNCNAME        # avoid default sproc::_ExecutableName of python3.9 
@@ -126,15 +138,17 @@ jok-tds(){
    export HamamatsuMaskManager__MAGIC_virtual_thickness_MM=0.10  # default 0.05 
    export NNVTMaskManager__MAGIC_virtual_thickness_MM=0.10       # default 0.05
 
+
    #local mode=DebugLite
    #local mode=Nothing     # GPU leak debug 
-   #local mode=Minimal
-   local mode=Hit
+   local mode=Minimal # measurement/production
+   #local mode=Hit
+   #local mode=HitPhotonSeq
 
    export OPTICKS_EVENT_MODE=$mode  ## see SEventConfig::Initialize SEventConfig::EventMode
    export OPTICKS_MAX_BOUNCE=31
-   export OPTICKS_MAX_PHOTON=M1
-   export OPTICKS_NUM_EVENT=1000
+   export OPTICKS_MAX_PHOTON=M300
+   export OPTICKS_NUM_EVENT=20
 
    if [ "$OPTICKS_EVENT_MODE" == "DebugLite" ]; then
        export G4CXOpticks__SaveGeometry_DIR=$HOME/.opticks/GEOM/$GEOM
@@ -167,9 +181,13 @@ jok-tds(){
 
    opts="$opts $(jok-anamgr) "
 
+   local ene="1.0"
+   local ENE=${ENE:-$ene}
    local gun1="gun"
    local gun2="gun --particles gamma --momentums 2.223 --momentums-interp KineticEnergy --positions 0 0 0"
    local gun3="gun --particles gamma --momentums 22.23 --momentums-interp KineticEnergy --positions 0 0 0"
+   local gun4="gun --particles gamma --momentums ${ENE} --momentums-interp KineticEnergy --positions 0 0 0"
+   local gun5="gun --particles mu- --momentums 215000 --positions 0 0 20000 --directions 0 0 -1"
    local trgs=""     
    : "trgs" are the arguments after the opts : eg "gun" or "opticks" 
 
@@ -180,6 +198,8 @@ jok-tds(){
      1) trgs="$trgs $gun1" ;;
      2) trgs="$trgs $gun2"  ;;
      3) trgs="$trgs $gun3"  ;;
+     4) trgs="$trgs $gun4"  ;;
+     5) trgs="$trgs $gun5"  ;;
    esac
 
 
@@ -199,6 +219,7 @@ jok-tds(){
 
        export QEvent__LIFECYCLE=1 
    }
+   #export SEvt=INFO
    if [ -n "$LOG" ]; then 
        echo $BASH_SOURCE - $FUNCNAME - logging enabled
        logging
@@ -259,13 +280,14 @@ EON
 jok-anamgr(){ cat << EOU
 --no-anamgr-normal
 --no-anamgr-genevt
---no-anamgr-edm-v2
+--anamgr-edm-v2
 --no-anamgr-grdm
 --no-anamgr-deposit
 --no-anamgr-deposit-tt
 --no-anamgr-interesting-process
 --no-anamgr-optical-parameter
 --no-anamgr-timer
+--opticks-anamgr
 EOU
    : --opticks-anamgr attempts to switch on U4RecorderAnaMgr - BUT THAT NEEDS opticksMode 2 or 3 
 }
@@ -285,15 +307,10 @@ jok-gdb()
     else
         H="-ex \"set breakpoint pending on\"";
         B="";
-
-        : changed BP delim to comma such that methods with spaces can be passed
-        : such as BP="junoHit_PMT::operator new,junoHit_PMT::operator delete"
-
-        IFS=',' read -ra bps <<< "$BP"
-        for bp in "${bps[@]}"
+        for bp in $BP;
         do
             B="$B -ex \"break $bp\" ";
-        done
+        done;
         T="-ex \"info break\" -ex r";
     fi;
     local runline="gdb $H $B $T --args $* ";

@@ -36,11 +36,6 @@ okjob-setup-junosw-opticks-pre-release()
 {
     source /cvmfs/juno.ihep.ac.cn/centos7_amd64_gcc1120_opticks/Pre-Release/J23.1.0-rc6/setup.sh
 }
-okjob-setup-junosw-opticks-current()
-{
-    source $HOME/junotop/bashrc.sh
-}
-
 
 okjob-setup()
 {
@@ -50,8 +45,7 @@ okjob-setup()
     mkdir -p $TMP          ## whether override or not, need to create 
     mkdir -p $HOME/okjob
 
-    #okjob-setup-junosw-opticks-pre-release
-    okjob-setup-junosw-opticks-current
+    okjob-setup-junosw-opticks-pre-release
 }
 
 okjob-head(){ 
@@ -113,8 +107,6 @@ arg=${1:-$defarg}
 case $arg in 
    main) okjob-main ;; 
   ctest) okjob-ctest ;; 
-  setup) okjob-setup ;; 
-   head) okjob-head ;; 
    init) jok-init ;; 
   info)  jok-info ;;
    grab) jok-grab ;;
